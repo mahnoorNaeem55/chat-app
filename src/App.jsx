@@ -1,19 +1,40 @@
-import { db } from './firebase'
-import { collection, getDocs } from 'firebase/firestore'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { auth } from './firebase'
+import { onAuthStateChanged } from 'firebase/auth'
+import Login from './Login'
+import ChatRoomList from './ChatRoomList'
+import ChatRoom from './ChatRoom'
 
 function App() {
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [currentRoom, setCurrentRoom] = useState(null)
+
   useEffect(() => {
-    const test = async () => {
-      const querySnapshot = await getDocs(collection(db, 'test'))
-      console.log('Firebase connected! ✅')
-    }
-    test()
+    const unsub = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser)
+      setLoading(false)
+    })
+    return () => unsub()
   }, [])
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#0d1b2e]">
+        <div className="text-white text-lg animate-pulse">Loading...</div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex items-center justify-center h-screen bg-gray-900">
-      <h1 className="text-white text-3xl font-bold">Chat App 🔥</h1>
+    <div>
+      {!user ? (
+        <Login />
+      ) : currentRoom ? (
+        <ChatRoom room={currentRoom} onBack={() => setCurrentRoom(null)} />
+      ) : (
+        <ChatRoomList onJoinRoom={(room) => setCurrentRoom(room)} />
+      )}
     </div>
   )
 }
