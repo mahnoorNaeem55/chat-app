@@ -42,6 +42,10 @@ function ChatRoom({ room, onBack }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  const deleteMessage = async (messageId) => {
+  const { deleteDoc, doc } = await import('firebase/firestore')
+  await deleteDoc(doc(db, 'rooms', room.id, 'messages', messageId))
+}
   const sendMessage = async () => {
     if (!newMessage.trim()) return
     await addDoc(collection(db, 'rooms', room.id, 'messages'), {
@@ -108,14 +112,25 @@ function ChatRoom({ room, onBack }) {
           return (
             <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
               <span style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '4px', padding: '0 4px' }}>{msg.displayName}</span>
-              <div style={{
-                maxWidth: '280px', padding: '10px 16px', borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                background: isMe ? '#2563eb' : 'rgba(255,255,255,0.1)',
-                color: 'white', fontSize: '14px',
-                border: isMe ? 'none' : '1px solid rgba(255,255,255,0.2)'
-              }}>
-                {msg.text}
-              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+  {isMe && (
+    <button
+      onClick={() => deleteMessage(msg.id)}
+      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '12px', opacity: 0.7, padding: '2px 6px' }}
+      title="Delete message"
+    >
+      🗑
+    </button>
+  )}
+  <div style={{
+    maxWidth: '280px', padding: '10px 16px', borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+    background: isMe ? '#2563eb' : 'rgba(255,255,255,0.1)',
+    color: 'white', fontSize: '14px',
+    border: isMe ? 'none' : '1px solid rgba(255,255,255,0.2)'
+  }}>
+    {msg.text}
+  </div>
+</div>
               <span style={{ color: '#6b7280', fontSize: '11px', marginTop: '4px', padding: '0 4px' }}>
                 {msg.createdAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
