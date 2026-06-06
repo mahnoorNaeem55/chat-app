@@ -37,7 +37,6 @@ function ChatRoomList({ onJoinRoom }) {
           return msgTime && msgTime > lastReadTime && notMine
         }).length
 
-        console.log('Room:', room.name, 'Unread:', unread, 'lastReadExists:', lastReadSnap.exists(), 'lastReadTime:', lastReadTime)
         setUnreadRooms(prev => ({ ...prev, [room.id]: unread }))
       })
     })

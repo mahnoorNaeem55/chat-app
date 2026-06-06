@@ -1,3 +1,4 @@
+import EmojiPicker from 'emoji-picker-react'
 import { useState, useEffect, useRef } from 'react'
 import { db, auth } from './firebase'
 import {
@@ -11,8 +12,34 @@ function ChatRoom({ room, onBack }) {
   const [newMessage, setNewMessage] = useState('')
   const [onlineUsers, setOnlineUsers] = useState([])
   const [showUsers, setShowUsers] = useState(false)
+  const [showEmoji, setShowEmoji] = useState(false)
   const bottomRef = useRef(null)
+  const isFirstLoad = useRef(true)
+ 
 
+const audioContext = useRef(null)
+
+const playNotification = () => {
+  try {
+    if (!audioContext.current) {
+      audioContext.current = new (window.AudioContext || window.webkitAudioContext)()
+    }
+    const ctx = audioContext.current
+    if (ctx.state === 'suspended') ctx.resume()
+    const oscillator = ctx.createOscillator()
+    const gainNode = ctx.createGain()
+    oscillator.connect(gainNode)
+    gainNode.connect(ctx.destination)
+    oscillator.frequency.setValueAtTime(587, ctx.currentTime)
+    oscillator.frequency.setValueAtTime(784, ctx.currentTime + 0.1)
+    gainNode.gain.setValueAtTime(0.3, ctx.currentTime)
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4)
+    oscillator.start(ctx.currentTime)
+    oscillator.stop(ctx.currentTime + 0.4)
+  } catch(e) {
+    console.log('Audio error:', e)
+  }
+}
   useEffect(() => {
     const presenceRef = doc(db, 'rooms', room.id, 'presence', auth.currentUser.uid)
     setDoc(presenceRef, {
@@ -31,12 +58,20 @@ function ChatRoom({ room, onBack }) {
   }, [room.id])
 
   useEffect(() => {
-    const q = query(collection(db, 'rooms', room.id, 'messages'), orderBy('createdAt'))
-    const unsub = onSnapshot(q, (snapshot) => {
-      setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-    })
-    return () => unsub()
-  }, [room.id])
+  const q = query(collection(db, 'rooms', room.id, 'messages'), orderBy('createdAt'))
+  const unsub = onSnapshot(q, (snapshot) => {
+    const newMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+    if (!isFirstLoad.current) {
+      const lastMsg = newMessages[newMessages.length - 1]
+      if (lastMsg && lastMsg.uid !== auth.currentUser.uid) {
+  playNotification()
+}
+    }
+    isFirstLoad.current = false
+    setMessages(newMessages)
+  })
+  return () => unsub()
+}, [room.id])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -63,7 +98,7 @@ function ChatRoom({ room, onBack }) {
 
       {/* Header */}
       <div style={{ background: '#1a3a5c', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
-        <button onClick={onBack} style={{ color: 'white', fontSize: '20px', background: 'none', border: 'none', cursor: 'pointer' }}>←</button>
+        <button onClick={onBack} style={{ color: 'white', fontSize: '20px', background: 'rgba(255,255,255,0.15)', border: 'none', cursor: 'pointer', width: '38px', height: '38px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>←</button>
         <div style={{ position: 'relative', width: '32px', height: '32px', flexShrink: 0 }}>
           <div style={{ position: 'absolute', top: 0, left: '4px', width: '20px', height: '20px', borderRadius: '50%', background: '#e8845a' }}></div>
           <div style={{ position: 'absolute', bottom: 0, right: '4px', width: '20px', height: '20px', borderRadius: '50%', background: '#4ab8b8' }}></div>
@@ -101,7 +136,9 @@ function ChatRoom({ room, onBack }) {
       )}
 
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div 
+ 
+  style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {messages.length === 0 && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <p style={{ color: '#6b7280', fontSize: '14px' }}>No messages yet — say hello! 👋</p>
@@ -141,23 +178,44 @@ function ChatRoom({ room, onBack }) {
       </div>
 
       {/* Input */}
-      <div style={{ background: '#1a3a5c', padding: '12px 16px 24px', display: 'flex', gap: '10px', flexShrink: 0 }}>
-        <input
-          type="text"
-          placeholder="Type a message..."
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-          style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '12px', padding: '12px 16px', color: 'white', fontSize: '14px', outline: 'none' }}
-        />
-        <button
-          onClick={sendMessage}
-          style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: '12px', padding: '12px 20px', cursor: 'pointer', fontWeight: '600', fontSize: '14px' }}
-        >
-          Send 📤
-        </button>
-      </div>
+      <div style={{ background: '#1a3a5c', padding: '12px 16px 24px', flexShrink: 0 }}>
+  {showEmoji && (
+    <div style={{ marginBottom: '8px' }}>
+      <EmojiPicker
+        onEmojiClick={(emojiData) => {
+          setNewMessage(prev => prev + emojiData.emoji)
+          setShowEmoji(false)
+        }}
+        width="100%"
+        height={350}
+        theme="dark"
+      />
     </div>
+  )}
+  <div style={{ display: 'flex', gap: '10px' }}>
+    <button
+      onClick={() => setShowEmoji(!showEmoji)}
+      style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '12px', padding: '12px', cursor: 'pointer', fontSize: '20px', flexShrink: 0 }}
+    >
+      😄
+    </button>
+    <input
+      type="text"
+      placeholder="Type a message..."
+      value={newMessage}
+      onChange={(e) => setNewMessage(e.target.value)}
+      onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+      style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '12px', padding: '12px 16px', color: 'white', fontSize: '14px', outline: 'none' }}
+    />
+    <button
+      onClick={sendMessage}
+      style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: '12px', padding: '12px 20px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', flexShrink: 0 }}
+    >
+      Send 📤
+    </button>
+  </div>
+</div>
+ </div>
   )
 }
 
