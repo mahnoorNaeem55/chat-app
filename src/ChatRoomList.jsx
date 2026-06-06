@@ -6,7 +6,7 @@ import {
 } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 
-function ChatRoomList({ onJoinRoom }) {
+function ChatRoomList({ onJoinRoom, darkMode, setDarkMode }) {
   const [rooms, setRooms] = useState([])
   const [newRoom, setNewRoom] = useState('')
   const [unreadRooms, setUnreadRooms] = useState({})
@@ -59,79 +59,100 @@ function ChatRoomList({ onJoinRoom }) {
     setNewRoom('')
   }
 
+  const bg = darkMode ? '#0d1b2e' : '#f0f4f8'
+  const cardBg = darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.95)'
+  const headerBg = darkMode ? '#1a3a5c' : '#1a3a5c'
+  const roomBg = darkMode ? 'rgba(255,255,255,0.05)' : 'white'
+  const roomBorder = darkMode ? 'rgba(255,255,255,0.1)' : '#e5e7eb'
+  const roomText = darkMode ? 'white' : '#0d1b2e'
+  const subText = darkMode ? 'rgba(255,255,255,0.5)' : '#6b7280'
+
   return (
-    <div className="relative flex flex-col items-center justify-center min-h-screen bg-[#0d1b2e] overflow-hidden py-8">
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: bg, padding: '32px 16px', position: 'relative', overflow: 'hidden' }}>
 
-      <div className="absolute top-[-80px] left-[-80px] w-64 h-64 rounded-full bg-[#1a3a5c] opacity-60"></div>
-      <div className="absolute bottom-[-80px] right-[-80px] w-64 h-64 rounded-full bg-[#1a3a5c] opacity-60"></div>
-      <div className="absolute top-16 right-16 w-4 h-4 rounded-full bg-blue-400 opacity-50"></div>
-      <div className="absolute bottom-24 left-16 w-3 h-3 rounded-full bg-blue-300 opacity-40"></div>
+      {/* Background circles */}
+      <div style={{ position: 'absolute', top: '-80px', left: '-80px', width: '256px', height: '256px', borderRadius: '50%', background: '#1a3a5c', opacity: 0.6 }}></div>
+      <div style={{ position: 'absolute', bottom: '-80px', right: '-80px', width: '256px', height: '256px', borderRadius: '50%', background: '#1a3a5c', opacity: 0.6 }}></div>
+      <div style={{ position: 'absolute', top: '64px', right: '64px', width: '16px', height: '16px', borderRadius: '50%', background: '#60a5fa', opacity: 0.5 }}></div>
+      <div style={{ position: 'absolute', bottom: '96px', left: '64px', width: '12px', height: '12px', borderRadius: '50%', background: '#93c5fd', opacity: 0.4 }}></div>
 
-      <div className="relative bg-white/10 backdrop-blur-md border border-white/20 w-full max-w-xs mx-4 rounded-3xl shadow-2xl overflow-hidden z-10">
+      {/* Card */}
+      <div style={{ position: 'relative', width: '100%', maxWidth: '320px', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.2)', zIndex: 10 }}>
 
-        <div className="bg-[#1a3a5c] px-8 pt-8 pb-6 flex flex-col items-center">
-          <div className="relative w-16 h-16 mb-3">
-            <div className="absolute top-0 left-2 w-10 h-10 rounded-full bg-[#e8845a] opacity-90"></div>
-            <div className="absolute bottom-0 right-2 w-10 h-10 rounded-full bg-[#4ab8b8] opacity-80"></div>
+        {/* Header */}
+        <div style={{ background: headerBg, padding: '32px 32px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '10px', padding: '6px 10px', cursor: 'pointer', fontSize: '16px' }}
+          >
+            {darkMode ? '☀️' : '🌙'}
+          </button>
+          <div style={{ position: 'relative', width: '64px', height: '64px', marginBottom: '12px' }}>
+            <div style={{ position: 'absolute', top: 0, left: '8px', width: '40px', height: '40px', borderRadius: '50%', background: '#e8845a' }}></div>
+            <div style={{ position: 'absolute', bottom: 0, right: '8px', width: '40px', height: '40px', borderRadius: '50%', background: '#4ab8b8' }}></div>
           </div>
-          <h2 className="text-white text-xl font-bold mb-1">Chat Rooms 💬</h2>
-          <p className="text-gray-400 text-xs text-center">
+          <h2 style={{ color: 'white', fontSize: '20px', fontWeight: 'bold', marginBottom: '4px' }}>Chat Rooms 💬</h2>
+          <p style={{ color: '#9ca3af', fontSize: '12px', textAlign: 'center' }}>
             Hey, {auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0]}! Pick a room to join
           </p>
         </div>
 
-        <div className="px-6 py-6 bg-white/80 backdrop-blur-sm">
+        {/* Content */}
+        <div style={{ background: cardBg, padding: '24px' }}>
 
-          <div className="flex gap-2 mb-4">
+          {/* Create room */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
             <input
               type="text"
               placeholder="New room name..."
               value={newRoom}
               onChange={(e) => setNewRoom(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && createRoom()}
-              className="flex-1 border border-white/40 rounded-xl px-4 py-2 bg-white/70 backdrop-blur-sm text-gray-700 text-sm outline-none focus:border-blue-400"
+              style={{ flex: 1, border: '1px solid rgba(255,255,255,0.2)', borderRadius: '12px', padding: '8px 16px', background: darkMode ? 'rgba(255,255,255,0.1)' : 'white', color: darkMode ? 'white' : '#0d1b2e', fontSize: '14px', outline: 'none' }}
             />
             <button
               onClick={createRoom}
-              className="bg-[#0d1b2e] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#1a3a5c] transition"
+              style={{ background: '#0d1b2e', color: 'white', border: 'none', borderRadius: '12px', padding: '8px 16px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}
             >
               + Add
             </button>
           </div>
 
-          <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+          {/* Room list */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto' }}>
             {rooms.length === 0 && (
-              <p className="text-gray-400 text-sm text-center py-4">No rooms yet — create one!</p>
+              <p style={{ color: '#9ca3af', fontSize: '14px', textAlign: 'center', padding: '16px 0' }}>No rooms yet — create one!</p>
             )}
             {rooms.map(room => (
               <button
                 key={room.id}
                 onClick={() => handleJoinRoom(room)}
-                className="w-full text-left px-4 py-4 rounded-2xl bg-white border border-gray-100 hover:bg-blue-50 hover:border-blue-300 transition shadow-sm group"
+                style={{ width: '100%', textAlign: 'left', padding: '16px', borderRadius: '16px', background: roomBg, border: `1px solid ${roomBorder}`, cursor: 'pointer', transition: 'all 0.2s' }}
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1a3a5c] to-[#0d1b2e] flex items-center justify-center text-lg shadow-md group-hover:scale-110 transition duration-300">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg, #1a3a5c, #0d1b2e)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>
                     💬
                   </div>
-                  <div className="flex-1">
-                    <p className="text-[#0d1b2e] font-bold text-base capitalize tracking-wide">{room.name}</p>
-                    <p className="text-gray-400 text-xs font-medium">Tap to join →</p>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ color: roomText, fontWeight: 'bold', fontSize: '15px', textTransform: 'capitalize', margin: 0 }}>{room.name}</p>
+                    <p style={{ color: subText, fontSize: '11px', margin: 0 }}>Tap to join →</p>
                   </div>
                   {unreadRooms[room.id] > 0 ? (
-                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center text-white text-xs font-bold animate-pulse">
+                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '11px', fontWeight: 'bold' }}>
                       {unreadRooms[room.id] > 9 ? '9+' : unreadRooms[room.id]}
                     </div>
                   ) : (
-                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#4ade80' }}></div>
                   )}
                 </div>
               </button>
             ))}
           </div>
 
+          {/* Sign out */}
           <button
             onClick={() => signOut(auth)}
-            className="w-full mt-4 flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-500 font-semibold py-3 rounded-xl transition duration-200"
+            style={{ width: '100%', marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: darkMode ? 'rgba(239,68,68,0.1)' : '#fff1f2', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontWeight: '600', padding: '12px', borderRadius: '12px', cursor: 'pointer' }}
           >
             🚪 Sign Out
           </button>
