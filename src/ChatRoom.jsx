@@ -4,7 +4,7 @@ import { db, auth } from './firebase'
 import {
   collection, addDoc, onSnapshot,
   serverTimestamp, query, orderBy,
-  doc, setDoc, deleteDoc
+  doc, setDoc, deleteDoc, getDoc
 } from 'firebase/firestore'
 
 function ChatRoom({ room, onBack, darkMode }) {
@@ -80,6 +80,21 @@ function ChatRoom({ room, onBack, darkMode }) {
     await deleteDoc(doc(db, 'rooms', room.id, 'messages', messageId))
   }
 
+  const addReaction = async (messageId, emoji) => {
+    const messageRef = doc(db, 'rooms', room.id, 'messages', messageId)
+    const freshDoc = await getDoc(messageRef)
+    const freshData = freshDoc.data()
+    const reactions = { ...(freshData?.reactions || {}) }
+    const userReactions = reactions[emoji] || []
+    if (userReactions.includes(auth.currentUser.uid)) {
+      reactions[emoji] = userReactions.filter(uid => uid !== auth.currentUser.uid)
+      if (reactions[emoji].length === 0) delete reactions[emoji]
+    } else {
+      reactions[emoji] = [...userReactions, auth.currentUser.uid]
+    }
+    await setDoc(messageRef, { reactions }, { merge: true })
+  }
+
   const sendMessage = async () => {
     if (!newMessage.trim()) return
     await addDoc(collection(db, 'rooms', room.id, 'messages'), {
@@ -92,7 +107,6 @@ function ChatRoom({ room, onBack, darkMode }) {
     setNewMessage('')
   }
 
-  // Theme colors
   const bg = darkMode ? '#0d1b2e' : '#f0f4f8'
   const msgAreaBg = darkMode ? 'transparent' : '#f8fafc'
   const inputBarBg = darkMode ? '#1a3a5c' : '#ffffff'
@@ -155,9 +169,48 @@ function ChatRoom({ room, onBack, darkMode }) {
         {messages.map(msg => {
           const isMe = msg.uid === auth.currentUser.uid
           return (
-            <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+            <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', marginTop: '8px' }}>
               <span style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '4px', padding: '0 4px' }}>{msg.displayName}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+
+              {/* Message bubble with hover reaction picker */}
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
+                onMouseEnter={e => { const p = e.currentTarget.querySelector('.rpicker'); if(p) p.style.opacity = '1' }}
+                onMouseLeave={e => { const p = e.currentTarget.querySelector('.rpicker'); if(p) p.style.opacity = '0' }}
+              >
+                {/* Reaction picker - appears above on hover */}
+                <div
+                  className="rpicker"
+                  style={{
+                    position: 'absolute',
+                    top: '-40px',
+                    left: isMe ? 'auto' : '0',
+                    right: isMe ? '0' : 'auto',
+                    display: 'flex',
+                    gap: '2px',
+                    opacity: 0,
+                    transition: 'opacity 0.2s',
+                    background: darkMode ? '#1e3a5c' : 'white',
+                    borderRadius: '20px',
+                    padding: '4px 8px',
+                    boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
+                    zIndex: 10,
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {['👍', '❤️', '😂', '😮', '😢'].map(emoji => (
+                    <button
+                      key={emoji}
+                      onClick={() => addReaction(msg.id, emoji)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '2px 4px', transition: 'transform 0.1s' }}
+                      onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.3)'}
+                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+
                 {isMe && (
                   <button
                     onClick={() => deleteMessage(msg.id)}
@@ -167,6 +220,7 @@ function ChatRoom({ room, onBack, darkMode }) {
                     🗑
                   </button>
                 )}
+
                 <div style={{
                   maxWidth: '280px', padding: '10px 16px',
                   borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
@@ -178,7 +232,31 @@ function ChatRoom({ room, onBack, darkMode }) {
                   {msg.text}
                 </div>
               </div>
-              <span style={{ color: '#6b7280', fontSize: '11px', marginTop: '4px', padding: '0 4px' }}>
+
+              {/* Reactions display */}
+              {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
+                  {Object.entries(msg.reactions).map(([emoji, uids]) => (
+                    uids.length > 0 && (
+                      <button
+                        key={emoji}
+                        onClick={() => addReaction(msg.id, emoji)}
+                        title={uids.includes(auth.currentUser.uid) ? 'Click to remove' : 'Click to react'}
+                        style={{
+                          background: uids.includes(auth.currentUser.uid) ? 'rgba(37,99,235,0.2)' : darkMode ? 'rgba(255,255,255,0.1)' : '#f1f5f9',
+                          border: uids.includes(auth.currentUser.uid) ? '1px solid #2563eb' : darkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0',
+                          borderRadius: '12px', padding: '2px 8px', cursor: 'pointer',
+                          fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px'
+                        }}
+                      >
+                        {emoji} <span style={{ color: darkMode ? 'white' : '#0d1b2e', fontSize: '11px' }}>{uids.length}</span>
+                      </button>
+                    )
+                  ))}
+                </div>
+              )}
+
+              <span style={{ color: '#6b7280', fontSize: '11px', marginTop: '2px', padding: '0 4px' }}>
                 {msg.createdAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
