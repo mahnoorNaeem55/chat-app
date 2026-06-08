@@ -13,6 +13,9 @@ function ChatRoom({ room, onBack, darkMode }) {
   const [onlineUsers, setOnlineUsers] = useState([])
   const [showUsers, setShowUsers] = useState(false)
   const [showEmoji, setShowEmoji] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [editText, setEditText] = useState('')
+  const [hoveredMsgId, setHoveredMsgId] = useState(null)
   const bottomRef = useRef(null)
   const isFirstLoad = useRef(true)
   const audioContext = useRef(null)
@@ -78,6 +81,14 @@ function ChatRoom({ room, onBack, darkMode }) {
 
   const deleteMessage = async (messageId) => {
     await deleteDoc(doc(db, 'rooms', room.id, 'messages', messageId))
+  }
+
+  const editMessage = async (messageId) => {
+    if (!editText.trim()) return
+    const messageRef = doc(db, 'rooms', room.id, 'messages', messageId)
+    await setDoc(messageRef, { text: editText.trim(), edited: true }, { merge: true })
+    setEditingId(null)
+    setEditText('')
   }
 
   const addReaction = async (messageId, emoji) => {
@@ -168,27 +179,29 @@ function ChatRoom({ room, onBack, darkMode }) {
         )}
         {messages.map(msg => {
           const isMe = msg.uid === auth.currentUser.uid
+          const isHovered = hoveredMsgId === msg.id
           return (
-            <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', marginTop: '8px' }}>
+            <div
+              key={msg.id}
+              style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', marginTop: '8px' }}
+              onMouseEnter={() => setHoveredMsgId(msg.id)}
+              onMouseLeave={() => setHoveredMsgId(null)}
+            >
               <span style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '4px', padding: '0 4px' }}>{msg.displayName}</span>
 
-              {/* Message bubble with hover reaction picker */}
-              <div
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}
-                onMouseEnter={e => { const p = e.currentTarget.querySelector('.rpicker'); if(p) p.style.opacity = '1' }}
-                onMouseLeave={e => { const p = e.currentTarget.querySelector('.rpicker'); if(p) p.style.opacity = '0' }}
-              >
-                {/* Reaction picker - appears above on hover */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}>
+
+                {/* Reaction picker + edit/delete — appears above on hover */}
                 <div
-                  className="rpicker"
                   style={{
                     position: 'absolute',
                     top: '-40px',
                     left: isMe ? 'auto' : '0',
                     right: isMe ? '0' : 'auto',
                     display: 'flex',
+                    alignItems: 'center',
                     gap: '2px',
-                    opacity: 0,
+                    opacity: isHovered ? 1 : 0,
                     transition: 'opacity 0.2s',
                     background: darkMode ? '#1e3a5c' : 'white',
                     borderRadius: '20px',
@@ -198,6 +211,7 @@ function ChatRoom({ room, onBack, darkMode }) {
                     whiteSpace: 'nowrap'
                   }}
                 >
+                  {/* Reaction emojis */}
                   {['👍', '❤️', '😂', '😮', '😢'].map(emoji => (
                     <button
                       key={emoji}
@@ -209,18 +223,38 @@ function ChatRoom({ room, onBack, darkMode }) {
                       {emoji}
                     </button>
                   ))}
+
+                  {/* Divider — only for my messages */}
+                  {isMe && (
+                    <div style={{ width: '1px', height: '20px', background: 'rgba(150,150,150,0.3)', margin: '0 4px' }}></div>
+                  )}
+
+                  {/* Edit & Delete — only for my messages */}
+                  {isMe && (
+                    <>
+                      <button
+                        onClick={() => { setEditingId(msg.id); setEditText(msg.text) }}
+                        title="Edit message"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '2px 4px', transition: 'transform 0.1s' }}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.3)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => deleteMessage(msg.id)}
+                        title="Delete message"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '2px 4px', transition: 'transform 0.1s' }}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.3)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                        🗑
+                      </button>
+                    </>
+                  )}
                 </div>
 
-                {isMe && (
-                  <button
-                    onClick={() => deleteMessage(msg.id)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '12px', opacity: 0.7, padding: '2px 6px' }}
-                    title="Delete message"
-                  >
-                    🗑
-                  </button>
-                )}
-
+                {/* Message bubble */}
                 <div style={{
                   maxWidth: '280px', padding: '10px 16px',
                   borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
@@ -229,7 +263,39 @@ function ChatRoom({ room, onBack, darkMode }) {
                   fontSize: '14px',
                   border: isMe ? 'none' : otherMsgBorder
                 }}>
-                  {msg.text}
+                  {editingId === msg.id ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <input
+                        autoFocus
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') editMessage(msg.id)
+                          if (e.key === 'Escape') { setEditingId(null); setEditText('') }
+                        }}
+                        style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '8px', padding: '4px 8px', color: 'white', fontSize: '14px', outline: 'none', width: '100%' }}
+                      />
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                        <button
+                          onClick={() => { setEditingId(null); setEditText('') }}
+                          style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '6px', padding: '2px 8px', color: 'white', fontSize: '11px', cursor: 'pointer' }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => editMessage(msg.id)}
+                          style={{ background: 'white', border: 'none', borderRadius: '6px', padding: '2px 8px', color: '#2563eb', fontSize: '11px', cursor: 'pointer', fontWeight: 'bold' }}
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <span>
+                      {msg.text}
+                      {msg.edited && <span style={{ fontSize: '10px', opacity: 0.7, marginLeft: '6px' }}>(edited)</span>}
+                    </span>
+                  )}
                 </div>
               </div>
 
