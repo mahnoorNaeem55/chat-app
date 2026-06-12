@@ -6,6 +6,7 @@ import {
   serverTimestamp, query, orderBy,
   doc, setDoc, deleteDoc, getDoc
 } from 'firebase/firestore'
+import { ArrowLeft, Smile, Send, Pencil, Trash2, Reply, X } from 'lucide-react'
 
 function ChatRoom({ room, onBack, darkMode }) {
   const [messages, setMessages] = useState([])
@@ -16,6 +17,9 @@ function ChatRoom({ room, onBack, darkMode }) {
   const [editingId, setEditingId] = useState(null)
   const [editText, setEditText] = useState('')
   const [hoveredMsgId, setHoveredMsgId] = useState(null)
+  const [replyTo, setReplyTo] = useState(null)
+  const [typingUsers, setTypingUsers] = useState([])
+  const typingTimeoutRef = useRef(null)
   const bottomRef = useRef(null)
   const isFirstLoad = useRef(true)
   const audioContext = useRef(null)
@@ -55,6 +59,17 @@ function ChatRoom({ room, onBack, darkMode }) {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'rooms', room.id, 'presence'), (snapshot) => {
       setOnlineUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
+    })
+    return () => unsub()
+  }, [room.id])
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'rooms', room.id, 'typing'), (snapshot) => {
+      const now = Date.now()
+      const typing = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(t => t.id !== auth.currentUser.uid && t.timestamp && (now - t.timestamp.toMillis() < 3000))
+      setTypingUsers(typing)
     })
     return () => unsub()
   }, [room.id])
@@ -106,6 +121,28 @@ function ChatRoom({ room, onBack, darkMode }) {
     await setDoc(messageRef, { reactions }, { merge: true })
   }
 
+  const updateTypingStatus = async (isTyping) => {
+    const typingRef = doc(db, 'rooms', room.id, 'typing', auth.currentUser.uid)
+    if (isTyping) {
+      await setDoc(typingRef, {
+        displayName: auth.currentUser.displayName || auth.currentUser.email.split('@')[0],
+        timestamp: serverTimestamp()
+      })
+    } else {
+      await deleteDoc(typingRef)
+    }
+  }
+
+  const handleTyping = (value) => {
+    setNewMessage(value)
+    updateTypingStatus(true)
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+    typingTimeoutRef.current = setTimeout(() => {
+      updateTypingStatus(false)
+    }, 2000)
+  }
+
   const sendMessage = async () => {
     if (!newMessage.trim()) return
     await addDoc(collection(db, 'rooms', room.id, 'messages'), {
@@ -113,41 +150,68 @@ function ChatRoom({ room, onBack, darkMode }) {
       createdAt: serverTimestamp(),
       uid: auth.currentUser.uid,
       email: auth.currentUser.email,
-      displayName: auth.currentUser.displayName || auth.currentUser.email.split('@')[0]
+      displayName: auth.currentUser.displayName || auth.currentUser.email.split('@')[0],
+      replyTo: replyTo ? { id: replyTo.id, text: replyTo.text, displayName: replyTo.displayName } : null
     })
     setNewMessage('')
+    setReplyTo(null)
+    updateTypingStatus(false)
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
   }
 
-  const bg = darkMode ? '#0d1b2e' : '#f0f4f8'
-  const msgAreaBg = darkMode ? 'transparent' : '#f8fafc'
-  const inputBarBg = darkMode ? '#1a3a5c' : '#ffffff'
-  const inputBg = darkMode ? 'rgba(255,255,255,0.1)' : '#f1f5f9'
-  const inputBorder = darkMode ? '1px solid rgba(255,255,255,0.2)' : '1px solid #e2e8f0'
-  const inputColor = darkMode ? 'white' : '#0d1b2e'
-  const otherMsgBg = darkMode ? 'rgba(255,255,255,0.1)' : 'white'
-  const otherMsgColor = darkMode ? 'white' : '#0d1b2e'
-  const otherMsgBorder = darkMode ? '1px solid rgba(255,255,255,0.2)' : '1px solid #e2e8f0'
+  // Theme colors — warm soft light / deep dark teal
+  const bg = darkMode ? '#042f2e' : '#f2f8f6'
+  const headerBg = darkMode
+    ? 'linear-gradient(135deg, #134e4a, #0f766e)'
+    : 'linear-gradient(135deg, #4a9e8e, #5bb5a2)'
+  const msgAreaBg = darkMode ? '#042f2e' : '#f2f8f6'
+  const inputBarBg = darkMode ? '#0f2d2b' : 'white'
+  const inputBg = darkMode ? 'rgba(255,255,255,0.08)' : '#f4faf8'
+  const inputBorder = darkMode ? '1px solid rgba(255,255,255,0.12)' : '1px solid #c8e6e0'
+  const inputColor = darkMode ? 'white' : '#3a8a7a'
+  const myMsgBg = darkMode
+    ? 'linear-gradient(135deg, #0f766e, #0d9488)'
+    : 'linear-gradient(135deg, #4a9e8e, #5bb5a2)'
+  const otherMsgBg = darkMode ? 'rgba(255,255,255,0.08)' : 'white'
+  const otherMsgColor = darkMode ? 'white' : '#3a8a7a'
+  const otherMsgBorder = darkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #c8e6e0'
+  const actionBarBg = darkMode ? '#134e4a' : 'white'
+  const iconColor = darkMode ? 'rgba(255,255,255,0.7)' : '#4a9e8e'
+  const dropdownBg = darkMode ? '#0f2d2b' : '#f4faf8'
+  const timestampColor = darkMode ? 'rgba(255,255,255,0.35)' : '#8ec4bc'
+  const nameColor = darkMode ? 'rgba(255,255,255,0.5)' : '#4a9e8e'
+  const replyAccent = darkMode ? '#0d9488' : '#4a9e8e'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: bg, overflow: 'hidden' }}>
 
+      <style>{`
+        @keyframes typingBounce {
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+          30% { transform: translateY(-4px); opacity: 1; }
+        }
+      `}</style>
+
       {/* Header */}
-      <div style={{ background: '#1a3a5c', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0, boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
-        <button onClick={onBack} style={{ color: 'white', fontSize: '20px', background: 'rgba(255,255,255,0.15)', border: 'none', cursor: 'pointer', width: '38px', height: '38px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>←</button>
-        <div style={{ position: 'relative', width: '32px', height: '32px', flexShrink: 0 }}>
-          <div style={{ position: 'absolute', top: 0, left: '4px', width: '20px', height: '20px', borderRadius: '50%', background: '#e8845a' }}></div>
-          <div style={{ position: 'absolute', bottom: 0, right: '4px', width: '20px', height: '20px', borderRadius: '50%', background: '#4ab8b8' }}></div>
+      <div style={{ background: headerBg, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0, boxShadow: '0 4px 20px rgba(74,158,142,0.25)' }}>
+        <button onClick={onBack} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', cursor: 'pointer', width: '38px', height: '38px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <ArrowLeft size={20} color="white" />
+        </button>
+        <div style={{ position: 'relative', width: '36px', height: '36px', flexShrink: 0 }}>
+          <div style={{ position: 'absolute', top: 0, left: '4px', width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,255,255,0.3)' }}></div>
+          <div style={{ position: 'absolute', bottom: 0, right: '4px', width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }}></div>
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: '14px' }}>💬</div>
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ color: 'white', fontWeight: 'bold', fontSize: '16px', textTransform: 'capitalize' }}>{room.name}</div>
-          <div style={{ color: '#4ade80', fontSize: '11px' }}>{onlineUsers.length} online now</div>
+          <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px' }}>{onlineUsers.length} online now</div>
         </div>
         <button
           onClick={() => setShowUsers(!showUsers)}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '10px', padding: '6px 10px', cursor: 'pointer', color: 'white', fontSize: '12px' }}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '12px', padding: '6px 12px', cursor: 'pointer', color: 'white', fontSize: '12px' }}
         >
           {onlineUsers.slice(0, 3).map((u, i) => (
-            <div key={i} style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'linear-gradient(135deg, #60a5fa, #4ab8b8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', color: 'white', marginLeft: i > 0 ? '-6px' : 0, border: '2px solid #1a3a5c' }}>
+            <div key={i} style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', color: 'white', marginLeft: i > 0 ? '-6px' : 0, border: '2px solid rgba(74,158,142,0.4)' }}>
               {u.displayName?.[0]?.toUpperCase()}
             </div>
           ))}
@@ -157,13 +221,13 @@ function ChatRoom({ room, onBack, darkMode }) {
 
       {/* Online users dropdown */}
       {showUsers && (
-        <div style={{ background: '#163354', padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
-          <div style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '1px' }}>Online in this room</div>
+        <div style={{ background: dropdownBg, padding: '10px 16px', borderBottom: `1px solid ${inputBorder}`, flexShrink: 0 }}>
+          <div style={{ color: nameColor, fontSize: '11px', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '600' }}>Online in this room</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {onlineUsers.map((u) => (
-              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: '20px' }}>
+              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: darkMode ? 'rgba(255,255,255,0.08)' : 'white', padding: '4px 12px', borderRadius: '20px', border: `1px solid ${darkMode ? 'rgba(255,255,255,0.1)' : '#c8e6e0'}` }}>
                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#4ade80' }}></div>
-                <span style={{ color: 'white', fontSize: '12px' }}>{u.displayName}</span>
+                <span style={{ color: darkMode ? 'white' : '#3a8a7a', fontSize: '12px' }}>{u.displayName}</span>
               </div>
             ))}
           </div>
@@ -174,7 +238,7 @@ function ChatRoom({ room, onBack, darkMode }) {
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', background: msgAreaBg }}>
         {messages.length === 0 && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-            <p style={{ color: '#6b7280', fontSize: '14px' }}>No messages yet — say hello! 👋</p>
+            <p style={{ color: nameColor, fontSize: '14px' }}>No messages yet — say hello! 👋</p>
           </div>
         )}
         {messages.map(msg => {
@@ -187,31 +251,29 @@ function ChatRoom({ room, onBack, darkMode }) {
               onMouseEnter={() => setHoveredMsgId(msg.id)}
               onMouseLeave={() => setHoveredMsgId(null)}
             >
-              <span style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '4px', padding: '0 4px' }}>{msg.displayName}</span>
+              <span style={{ color: nameColor, fontSize: '11px', marginBottom: '4px', padding: '0 4px', fontWeight: '500' }}>{msg.displayName}</span>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}>
 
-                {/* Reaction picker + edit/delete — appears above on hover */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '-40px',
-                    left: isMe ? 'auto' : '0',
-                    right: isMe ? '0' : 'auto',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '2px',
-                    opacity: isHovered ? 1 : 0,
-                    transition: 'opacity 0.2s',
-                    background: darkMode ? '#1e3a5c' : 'white',
-                    borderRadius: '20px',
-                    padding: '4px 8px',
-                    boxShadow: '0 2px 12px rgba(0,0,0,0.3)',
-                    zIndex: 10,
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  {/* Reaction emojis */}
+                {/* Action bar */}
+                <div style={{
+                  position: 'absolute',
+                  top: '-44px',
+                  left: isMe ? 'auto' : '0',
+                  right: isMe ? '0' : 'auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '2px',
+                  opacity: isHovered ? 1 : 0,
+                  transition: 'opacity 0.2s',
+                  background: actionBarBg,
+                  borderRadius: '20px',
+                  padding: '5px 10px',
+                  boxShadow: darkMode ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(74,158,142,0.15)',
+                  border: `1px solid ${darkMode ? 'rgba(255,255,255,0.1)' : '#c8e6e0'}`,
+                  zIndex: 10,
+                  whiteSpace: 'nowrap'
+                }}>
                   {['👍', '❤️', '😂', '😮', '😢'].map(emoji => (
                     <button
                       key={emoji}
@@ -224,31 +286,37 @@ function ChatRoom({ room, onBack, darkMode }) {
                     </button>
                   ))}
 
-                  {/* Divider — only for my messages */}
-                  {isMe && (
-                    <div style={{ width: '1px', height: '20px', background: 'rgba(150,150,150,0.3)', margin: '0 4px' }}></div>
-                  )}
+                  <div style={{ width: '1px', height: '20px', background: darkMode ? 'rgba(255,255,255,0.15)' : '#c8e6e0', margin: '0 4px' }}></div>
 
-                  {/* Edit & Delete — only for my messages */}
+                  <button
+                    onClick={() => setReplyTo({ id: msg.id, text: msg.text, displayName: msg.displayName })}
+                    title="Reply"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', display: 'flex', alignItems: 'center', transition: 'transform 0.1s' }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                  >
+                    <Reply size={15} color={iconColor} />
+                  </button>
+
                   {isMe && (
                     <>
                       <button
                         onClick={() => { setEditingId(msg.id); setEditText(msg.text) }}
-                        title="Edit message"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '2px 4px', transition: 'transform 0.1s' }}
-                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.3)'}
+                        title="Edit"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', display: 'flex', alignItems: 'center', transition: 'transform 0.1s' }}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'}
                         onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                       >
-                        ✏️
+                        <Pencil size={14} color={iconColor} />
                       </button>
                       <button
                         onClick={() => deleteMessage(msg.id)}
-                        title="Delete message"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '2px 4px', transition: 'transform 0.1s' }}
-                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.3)'}
+                        title="Delete"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', display: 'flex', alignItems: 'center', transition: 'transform 0.1s' }}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.2)'}
                         onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                       >
-                        🗑
+                        <Trash2 size={14} color="#ef4444" />
                       </button>
                     </>
                   )}
@@ -256,13 +324,31 @@ function ChatRoom({ room, onBack, darkMode }) {
 
                 {/* Message bubble */}
                 <div style={{
-                  maxWidth: '280px', padding: '10px 16px',
+                  maxWidth: '280px',
+                  padding: '10px 16px',
                   borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                  background: isMe ? '#2563eb' : otherMsgBg,
+                  background: isMe ? myMsgBg : otherMsgBg,
                   color: isMe ? 'white' : otherMsgColor,
                   fontSize: '14px',
-                  border: isMe ? 'none' : otherMsgBorder
+                  border: isMe ? 'none' : otherMsgBorder,
+                  boxShadow: isMe ? '0 4px 12px rgba(74,158,142,0.25)' : '0 2px 8px rgba(0,0,0,0.05)'
                 }}>
+                  {/* Reply preview */}
+                  {msg.replyTo && (
+                    <div style={{
+                      background: isMe ? 'rgba(255,255,255,0.15)' : darkMode ? 'rgba(255,255,255,0.08)' : '#e8f5f2',
+                      borderLeft: `3px solid ${isMe ? 'rgba(255,255,255,0.6)' : replyAccent}`,
+                      borderRadius: '6px',
+                      padding: '4px 8px',
+                      marginBottom: '6px',
+                      fontSize: '12px',
+                      opacity: 0.9
+                    }}>
+                      <div style={{ fontWeight: 'bold', marginBottom: '2px', color: isMe ? 'white' : replyAccent }}>{msg.replyTo.displayName}</div>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px', color: isMe ? 'rgba(255,255,255,0.8)' : '#3a8a7a' }}>{msg.replyTo.text}</div>
+                    </div>
+                  )}
+
                   {editingId === msg.id ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <input
@@ -284,7 +370,7 @@ function ChatRoom({ room, onBack, darkMode }) {
                         </button>
                         <button
                           onClick={() => editMessage(msg.id)}
-                          style={{ background: 'white', border: 'none', borderRadius: '6px', padding: '2px 8px', color: '#2563eb', fontSize: '11px', cursor: 'pointer', fontWeight: 'bold' }}
+                          style={{ background: 'white', border: 'none', borderRadius: '6px', padding: '2px 8px', color: '#4a9e8e', fontSize: '11px', cursor: 'pointer', fontWeight: 'bold' }}
                         >
                           Save
                         </button>
@@ -293,7 +379,7 @@ function ChatRoom({ room, onBack, darkMode }) {
                   ) : (
                     <span>
                       {msg.text}
-                      {msg.edited && <span style={{ fontSize: '10px', opacity: 0.7, marginLeft: '6px' }}>(edited)</span>}
+                      {msg.edited && <span style={{ fontSize: '10px', opacity: 0.6, marginLeft: '6px' }}>(edited)</span>}
                     </span>
                   )}
                 </div>
@@ -309,20 +395,24 @@ function ChatRoom({ room, onBack, darkMode }) {
                         onClick={() => addReaction(msg.id, emoji)}
                         title={uids.includes(auth.currentUser.uid) ? 'Click to remove' : 'Click to react'}
                         style={{
-                          background: uids.includes(auth.currentUser.uid) ? 'rgba(37,99,235,0.2)' : darkMode ? 'rgba(255,255,255,0.1)' : '#f1f5f9',
-                          border: uids.includes(auth.currentUser.uid) ? '1px solid #2563eb' : darkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0',
+                          background: uids.includes(auth.currentUser.uid)
+                            ? 'rgba(74,158,142,0.12)'
+                            : darkMode ? 'rgba(255,255,255,0.08)' : 'white',
+                          border: uids.includes(auth.currentUser.uid)
+                            ? '1px solid #4a9e8e'
+                            : darkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #c8e6e0',
                           borderRadius: '12px', padding: '2px 8px', cursor: 'pointer',
                           fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px'
                         }}
                       >
-                        {emoji} <span style={{ color: darkMode ? 'white' : '#0d1b2e', fontSize: '11px' }}>{uids.length}</span>
+                        {emoji} <span style={{ color: darkMode ? 'white' : '#3a8a7a', fontSize: '11px' }}>{uids.length}</span>
                       </button>
                     )
                   ))}
                 </div>
               )}
 
-              <span style={{ color: '#6b7280', fontSize: '11px', marginTop: '2px', padding: '0 4px' }}>
+              <span style={{ color: timestampColor, fontSize: '11px', marginTop: '2px', padding: '0 4px' }}>
                 {msg.createdAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
@@ -331,8 +421,46 @@ function ChatRoom({ room, onBack, darkMode }) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <div style={{ background: inputBarBg, padding: '12px 16px 24px', flexShrink: 0, borderTop: darkMode ? 'none' : '1px solid #e2e8f0' }}>
+      {/* Input area */}
+      <div style={{ background: inputBarBg, padding: '12px 16px 24px', flexShrink: 0, borderTop: darkMode ? '1px solid rgba(255,255,255,0.08)' : '1px solid #c8e6e0' }}>
+
+        {/* Typing indicator */}
+        {typingUsers.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', padding: '0 4px' }}>
+            <div style={{ display: 'flex', gap: '3px' }}>
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: replyAccent, animation: 'typingBounce 1.4s infinite ease-in-out' }}></div>
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: replyAccent, animation: 'typingBounce 1.4s infinite ease-in-out 0.2s' }}></div>
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: replyAccent, animation: 'typingBounce 1.4s infinite ease-in-out 0.4s' }}></div>
+            </div>
+            <span style={{ color: nameColor, fontSize: '12px', fontStyle: 'italic' }}>
+              {typingUsers.map(u => u.displayName).join(', ')} {typingUsers.length === 1 ? 'is' : 'are'} typing...
+            </span>
+          </div>
+        )}
+
+        {/* Reply preview */}
+        {replyTo && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: darkMode ? 'rgba(255,255,255,0.08)' : '#e8f5f2',
+            borderLeft: `3px solid ${replyAccent}`,
+            borderRadius: '10px',
+            padding: '8px 12px',
+            marginBottom: '10px'
+          }}>
+            <div>
+              <div style={{ color: replyAccent, fontSize: '11px', fontWeight: 'bold' }}>Replying to {replyTo.displayName}</div>
+              <div style={{ color: darkMode ? 'rgba(255,255,255,0.6)' : '#3a8a7a', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>{replyTo.text}</div>
+            </div>
+            <button
+              onClick={() => setReplyTo(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 4px' }}
+            >
+              <X size={16} color={darkMode ? 'rgba(255,255,255,0.5)' : replyAccent} />
+            </button>
+          </div>
+        )}
+
         {showEmoji && (
           <div style={{ marginBottom: '8px' }}>
             <EmojiPicker
@@ -346,26 +474,39 @@ function ChatRoom({ room, onBack, darkMode }) {
             />
           </div>
         )}
+
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
             onClick={() => setShowEmoji(!showEmoji)}
-            style={{ background: inputBg, border: inputBorder, borderRadius: '12px', padding: '12px', cursor: 'pointer', fontSize: '20px', flexShrink: 0 }}
+            style={{ background: inputBg, border: inputBorder, borderRadius: '12px', padding: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           >
-            😄
+            <Smile size={20} color={iconColor} />
           </button>
           <input
             type="text"
             placeholder="Type a message..."
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
+            onChange={(e) => handleTyping(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
             style={{ flex: 1, background: inputBg, border: inputBorder, borderRadius: '12px', padding: '12px 16px', color: inputColor, fontSize: '14px', outline: 'none' }}
           />
           <button
             onClick={sendMessage}
-            style={{ background: '#2563eb', color: 'white', border: 'none', borderRadius: '12px', padding: '12px 20px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', flexShrink: 0 }}
+            style={{
+              background: 'linear-gradient(135deg, #4a9e8e, #5bb5a2)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '12px 20px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              boxShadow: '0 4px 12px rgba(74,158,142,0.3)'
+            }}
           >
-            Send 📤
+            <Send size={18} color="white" />
           </button>
         </div>
       </div>
